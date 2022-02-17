@@ -1,0 +1,37 @@
+baseURL = "https://mmae.kr"
+title = "mmaekr"
+theme = "etch"
+languageCode = "en-US"
+enableInlineShortcodes = true
+pygmentsCodeFences = true
+pygmentsUseClasses = true
+
+publishDir = "public"
+
+[params]
+  description = ""
+  copyright = "Copyright © 2024 mmaekr"
+  dark = "off"
+  highlight = true
+
+[menu]
+  [[menu.main]]
+    identifier = "posts"
+    name = "posts"
+    title = "posts"
+    url = "/posts"
+    weight = 10
+
+  [[menu.main]]
+    identifier = "projects"
+    name = "projects"
+    title = "projects"
+    url = "https://github.com/mmaekr"
+    weight = 20
+
+[permalinks]
+  posts = "/:title/"
+
+[markup.goldmark.renderer]
+  # Allows HTML in Markdown
+  unsafe = true

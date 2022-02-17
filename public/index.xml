@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>mmaekr</title>
+    <link>http://localhost:1313/</link>
+    <description>Recent content on mmaekr</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-US</language>
+    <lastBuildDate>Wed, 12 Jun 2024 20:03:11 -0500</lastBuildDate>
+    
+	<atom:link href="http://localhost:1313/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    
+    <item>
+      <title>Making a Battlebit Remastered Minimap with Packet Sniffing</title>
+      <link>http://localhost:1313/making-a-battlebit-remastered-minimap-with-packet-sniffing/</link>
+      <pubDate>Wed, 12 Jun 2024 20:03:11 -0500</pubDate>
+      
+      <guid>http://localhost:1313/making-a-battlebit-remastered-minimap-with-packet-sniffing/</guid>
+      <description>&lt;p&gt;&lt;em&gt;This post is for educational purposes only.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;A few months ago I purchased Battlebit Remastered, which is a &amp;ldquo;massive multiplayer FPS.&amp;rdquo; The game is has provided me with a lot of enjoyment, but I have one gripe: there is no minimap. Pressing the &amp;lsquo;M&amp;rsquo; key does provide a map but it is not exactly mini: it fills up half your screen and makes it virtually impossible to play while activated. I thought it would be a fun project to try and make my own fully passive minimap: no hooks or inspecting process memory. Just pure packet sniffing. I also challenged myself to not disassemble and reverse the game&amp;rsquo;s binary, which is why all my findings are closer to educated guesses rather than absolute truths.&lt;/p&gt;
+&lt;figure&gt;&lt;img src=&#34;https://static.wikia.nocookie.net/callofduty/images/5/52/Satellite_CoDO.png&#34;
+    alt=&#34;My inspiration was the Orbital VSAT killstreak from Black Ops 2, which was a better UAV that also showed which direction players were facing.&#34;&gt;&lt;figcaption&gt;
+      &lt;p&gt;My inspiration was the Orbital VSAT killstreak from Black Ops 2, which was a better UAV that also showed which direction players were facing.&lt;/p&gt;
+    &lt;/figcaption&gt;
+&lt;/figure&gt;
+
+&lt;hr&gt;
+&lt;h2 id=&#34;reversing-the-packet-format&#34;&gt;Reversing the Packet Format&lt;/h2&gt;
+&lt;p&gt;The first step was to see what kind of traffic the game generated while playing in a multiplayer server. I used Wireshark to capture and analyze the packets. The game data was sent over UDP and was completely unencrypted, which made my life a whole lot easier.&lt;/p&gt;
+&lt;p&gt;I discovered that each UDP packet contains chunks of data in a TLV-esque format (more like LTV). There were several different kinds of packet types, but one type stood out in particular. Below is an example of a packet that contains players&amp;rsquo; location:&lt;/p&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;0000   02 00 00 29 00 0b 38 01 00 12 28 b6 c3 49 47 69   ...)..8...(..IGi
+0010   42 cc e6 da c3 ff 7f ff 7f ff 7f 03 f5 4e 7c 40   B............N|@
+0020   4c 3e 50 7d 7f 7f 7f 7f 00 14 03 00 00 ff 29 00   L&amp;gt;P}..........).
+0030   0b 09 04 00 80 4f 00 c4 6f 3d 7b 42 99 b6 0b c4   .....O..o={B....
+0040   ff 7f ff 7f ff 7f d9 fc a5 7a b0 9b 1d 37 7b 7f   .........z...7{.
+0050   7f 7f 7f 02 06 01 00 00 ff 0e 00 14 e4 0c 49 58   ..............IX
+0060   5d 8d fd 3e 3c 85 e5 00 00 0c 00 14 50 14 b2 55   ]..&amp;gt;&amp;lt;.......P..U
+0070   ae 8d 62 3e 03 68 12                              ..b&amp;gt;.h.
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;Figuring out the format of these packets took a bit of work and intuition. I found the coordinate data quite easily: there are three adjacent floats in the chunk, corresponding to x, y, and z coordinates. To get the full &amp;ldquo;VSAT&amp;rdquo; effect, I needed the heading of each player too, which was a bit trickier to find. I tediously stared at the hex digits of the chunks while facing my character in different directions, attempting to recognize any sort of pattern. Eventually, I figured out that the heading was encoded as a fractional 16-bit integer (i.e. number / 0xffff). The annotated packet below shows some of the fields I was able to decode. The player location packets sent from the client were in a similar format with some very minor differences.&lt;/p&gt;
+&lt;figure&gt;&lt;img src=&#34;http://localhost:1313/mmfps_uav/packet_breakdown.png&#34;
+    alt=&#34;Packet with a few of the fields decoded. I didn&amp;rsquo;t reverse the binary, so these are just guesses.&#34;&gt;&lt;figcaption&gt;
+      &lt;p&gt;Packet with a few of the fields decoded. I didn&amp;rsquo;t reverse the binary, so these are just guesses.&lt;/p&gt;
+    &lt;/figcaption&gt;
+&lt;/figure&gt;
+
+&lt;p&gt;To process the packets in real time, I made a Python script that utilized the scapy library&amp;rsquo;s &lt;code&gt;sniff()&lt;/code&gt; function. Combined with some basic struct &lt;code&gt;unpack()&lt;/code&gt;&amp;rsquo;s, I decoded all the data I needed to generate the minimap. I ran into an issue of my computer freezing after sniffing for an extended amount of time and after some googling, &lt;a href=&#34;https://stackoverflow.com/a/31263464&#34;&gt;found out why&lt;/a&gt;.&lt;/p&gt;
+&lt;div class=&#34;highlight&#34;&gt;&lt;pre tabindex=&#34;0&#34; class=&#34;chroma&#34;&gt;&lt;code class=&#34;language-py&#34; data-lang=&#34;py&#34;&gt;&lt;span class=&#34;line&#34;&gt;&lt;span class=&#34;cl&#34;&gt;&lt;span class=&#34;c1&#34;&gt;# without store=0, sniff will gradually gobble up all memory :/&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class=&#34;line&#34;&gt;&lt;span class=&#34;cl&#34;&gt;&lt;span class=&#34;n&#34;&gt;sniff&lt;/span&gt;&lt;span class=&#34;p&#34;&gt;(&lt;/span&gt;&lt;span class=&#34;n&#34;&gt;iface&lt;/span&gt;&lt;span class=&#34;o&#34;&gt;=&lt;/span&gt;&lt;span class=&#34;s2&#34;&gt;&amp;#34;enp0s31f6&amp;#34;&lt;/span&gt;&lt;span class=&#34;p&#34;&gt;,&lt;/span&gt; &lt;span class=&#34;nb&#34;&gt;filter&lt;/span&gt;&lt;span class=&#34;o&#34;&gt;=&lt;/span&gt;&lt;span class=&#34;s2&#34;&gt;&amp;#34;udp&amp;#34;&lt;/span&gt;&lt;span class=&#34;p&#34;&gt;,&lt;/span&gt; &lt;span class=&#34;n&#34;&gt;prn&lt;/span&gt;&lt;span class=&#34;o&#34;&gt;=&lt;/span&gt;&lt;span class=&#34;n&#34;&gt;decode_incoming&lt;/span&gt;&lt;span class=&#34;p&#34;&gt;,&lt;/span&gt; &lt;span class=&#34;n&#34;&gt;store&lt;/span&gt;&lt;span class=&#34;o&#34;&gt;=&lt;/span&gt;&lt;span class=&#34;mi&#34;&gt;0&lt;/span&gt;&lt;span class=&#34;p&#34;&gt;)&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h2 id=&#34;rendering&#34;&gt;Rendering&lt;/h2&gt;
+&lt;p&gt;With all the coordinate data extracted from the network, the next step was to display the data in a minimap-like format. I had initially planned to use the curses library, but ended up switching to WebGL, which I was a bit more familiar with. I used the &lt;a href=&#34;https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API&#34;&gt;WebSocket API&lt;/a&gt; to transfer the data from Python to JavaScript. The WebGL code is straightforward, it rerenders new positions each time it receives a WebSocket messages.&lt;/p&gt;
+&lt;p&gt;I built a simple user interface to control some parameters of how the minimap was rendered. I could control:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;zoom level&lt;/li&gt;
+&lt;li&gt;centering the minimap on the player vs the center of the map&lt;/li&gt;
+&lt;li&gt;toggling heading (triangles vs dots)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;figure&gt;&lt;img src=&#34;http://localhost:1313/mmfps_uav/site.png&#34;
+    alt=&#34;The full site. Amazing UI by yours truly.&#34;&gt;&lt;figcaption&gt;
+      &lt;p&gt;The full site. Amazing UI by yours truly.&lt;/p&gt;
+    &lt;/figcaption&gt;
+&lt;/figure&gt;
+
+&lt;p&gt;Below are some clips of the minimap in-game. The first is the full map view, and second is focused on my characters position.&lt;/p&gt;
+&lt;video width=&#34;500&#34; height=&#34;500&#34; controls muted style=&#34;display: block; margin-left: auto; margin-right: auto; width: 50%;&#34;&gt;
+	&lt;source src=&#34;http://localhost:1313/mmfps_uav/spawning_in.mp4&#34; type=&#34;video/mp4&#34;&gt;
+	Your browser does not support the video tag.
+&lt;/video&gt;
+&lt;p&gt;You can see the teams moving from their spawns to different parts of the map and my character spawning in the last few seconds.&lt;/p&gt;
+&lt;video width=&#34;500&#34; height=&#34;500&#34; controls muted style=&#34;display: block; margin-left: auto; margin-right: auto; width: 50%;&#34;&gt;
+	&lt;source src=&#34;http://localhost:1313/mmfps_uav/in_game.mp4&#34; type=&#34;video/mp4&#34;&gt;
+	Your browser does not support the video tag.
+&lt;/video&gt;
+&lt;p&gt;I had to relearn some high school trigonometry for the player centred map.&lt;/p&gt;
+&lt;p&gt;There are a few &lt;em&gt;minor&lt;/em&gt; usability issues:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;the triangles&amp;rsquo; movement is not very smooth&lt;/li&gt;
+&lt;li&gt;there is no background showing buildings/obstacles on the map, which makes it difficult to judge distance&lt;/li&gt;
+&lt;li&gt;the minimap needs to be flushed often because there is an issue with stale packets being in the queue&lt;/li&gt;
+&lt;li&gt;there is a &amp;lsquo;shadow&amp;rsquo; following my character&amp;rsquo;s position&lt;/li&gt;
+&lt;li&gt;and last but not least, I could not figure out was how to determine the corresponding team of a position packet, therefore all packets that come from the server (including my teammates) are shown in red.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;I am sure that with additional time and effort, I could sort all these issues out. But I was planning on making a proof of concept, and the concept was proofed enough for me.&lt;/p&gt;
+&lt;hr&gt;
+&lt;h2 id=&#34;conclusion&#34;&gt;Conclusion&lt;/h2&gt;
+&lt;p&gt;To actually use this, I had to forward the packets from my gaming PC to my laptop to offload the packet processing, otherwise my framerate would grind to a halt. It wasn&amp;rsquo;t the prettiest solution but I could make quick glances at my laptop screen and see what was going on.&lt;/p&gt;
+&lt;p&gt;It turns out you can still go pretty far even in this day and age just sniffing packets. I believe this project is &lt;em&gt;technically&lt;/em&gt; not breaking the EULA, but I would never try this on actual servers. As I said, educational purposes and what not.&lt;/p&gt;
+</description>
+    </item>
+    
+    
+  </channel>
+</rss>
