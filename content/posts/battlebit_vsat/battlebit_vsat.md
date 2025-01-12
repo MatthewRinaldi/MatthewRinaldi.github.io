@@ -1,6 +1,6 @@
 ---
 title: Making a Battlebit Remastered Minimap with Packet Sniffing
-date: 2024-06-12T20:03:11-05:00
+date: 2024-06-12T20:03:12-05:00
 ---
 
 *This post is for educational purposes only.*
@@ -10,7 +10,7 @@ A few months ago I purchased Battlebit Remastered, which is a "massive multiplay
 
 {{<figure 
 	src="https://static.wikia.nocookie.net/callofduty/images/5/52/Satellite_CoDO.png"
-	caption="My inspiration was the Orbital VSAT killstreak from Black Ops 2, which was a better UAV that also showed which direction players were facing."
+	caption="My inspiration was the Orbital VSAT killstreak from Black Ops 2, which was an upgraded UAV which displayed the direction all the players were facing."
 >}}
 
 ---

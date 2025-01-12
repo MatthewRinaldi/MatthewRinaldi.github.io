@@ -1,6 +1,6 @@
 baseURL = "https://mmae.kr"
 title = "mmaekr"
-theme = "etch"
+theme = "jane"
 languageCode = "en-US"
 enableInlineShortcodes = true
 pygmentsCodeFences = true
